@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>窗景 · Scenes Through Glass</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500&family=Inter:wght@300;400&display=swap');
+
+    :root {
+      --bg: #0a0a0a;
+      --glass: rgba(255,255,255,0.06);
+      --text: #d1d5db;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0a;
+      color: var(--text);
+      font-family: 'Inter', 'Noto Serif SC', system-ui, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 1;
+    }
+
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      pointer-events: none;
+      background: radial-gradient(circle at center, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.45) 70%);
+    }
+
+    .ui {
+      position: absolute;
+      z-index: 10;
+      pointer-events: auto;
+    }
+
+    .header {
+      top: 32px;
+      left: 40px;
+      font-size: 13px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      opacity: 0.6;
+      font-weight: 400;
+    }
+
+    .title {
+      top: 52px;
+      left: 40px;
+      font-family: 'Noto Serif SC', serif;
+      font-size: 28px;
+      font-weight: 500;
+      letter-spacing: -0.5px;
+      color: #f5f5f5;
+    }
+
+    .subtitle {
+      top: 88px;
+      left: 40px;
+      font-size: 14px;
+      opacity: 0.5;
+    }
+
+    .controls {
+      bottom: 40px;
+      left: 40px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      background: var(--glass);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #e5e7eb;
+      padding: 10px 18px;
+      border-radius: 9999px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+      backdrop-filter: blur(20px);
+      pointer-events: auto;
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      background: rgba(255,255,255,0.12);
+      border-color: rgba(255,255,255,0.25);
+      transform: translateY(-1px);
+    }
+
+    .btn:active {
+      transform: scale(0.985);
+    }
+
+    .hint {
+      position: absolute;
+      bottom: 40px;
+      right: 40px;
+      font-size: 12px;
+      opacity: 0.35;
+      max-width: 260px;
+      text-align: right;
+      line-height: 1.5;
+    }
+
+    /* 场景选择器 - 优雅底部栏 */
+    .scenes-bar, .weather-bar, .clarity-bar {
+      position: absolute;
+      left: 40px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0,0,0,0.38);
+      padding: 6px 16px;
+      border-radius: 9999px;
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 12.5px;
+    }
+    .scenes-bar { bottom: 118px; }
+    .clarity-bar { bottom: 78px; }
+    .weather-bar { bottom: 36px; }
+
+    .scenes-label {
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      opacity: 0.5;
+      margin-right: 6px;
+      white-space: nowrap;
+    }
+
+    .scene-btn {
+      font-size: 13px;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+      color: #c9cdd3;
+      white-space: nowrap;
+    }
+    .scene-btn:hover {
+      background: rgba(255,255,255,0.1);
+      color: #f1f5f9;
+    }
+    .scene-btn.active {
+      background: rgba(255,255,255,0.18);
+      color: #f8fafc;
+      font-weight: 500;
+    }
+
+    .weather-bar .btn {
+      font-size: 12px;
+      padding: 5px 13px;
+    }
+    .btn.ghost {
+      opacity: 0.65;
+      border-style: dashed;
+    }
+
+    /* 清晰度控制栏 */
+    .clarity-bar {
+      position: absolute;
+      left: 40px;
+      bottom: 78px;
+    }
+    .clarity-bar .btn {
+      font-size: 11.5px;
+      padding: 4px 11px;
+    }
+
+    /* 全屏按钮 - 右上角 */
+    .fullscreen-btn {
+      position: absolute;
+      top: 32px;
+      right: 40px;
+      z-index: 20;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #d1d5db;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 12px;
+      cursor: pointer;
+      backdrop-filter: blur(12px);
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    .fullscreen-btn:hover {
+      background: rgba(255,255,255,0.1);
+      color: #f1f5f9;
+      border-color: rgba(255,255,255,0.25);
+    }
+
+    /* 语言切换器 */
+    .lang-switcher {
+      position: absolute;
+      top: 32px;
+      right: 140px;
+      z-index: 20;
+      display: flex;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 9999px;
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+    }
+    .lang-btn {
+      padding: 5px 9px;
+      font-size: 11px;
+      cursor: pointer;
+      color: #a1a1aa;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .lang-btn:hover {
+      color: #e4e4e7;
+      background: rgba(255,255,255,0.06);
+    }
+    .lang-btn.active {
+      background: rgba(255,255,255,0.15);
+      color: #f4f4f5;
+      font-weight: 500;
+    }
+
+    .status {
+      position: absolute;
+      top: 40px;
+      right: 40px;
+      font-size: 12px;
+      padding: 4px 12px;
+      background: rgba(0,0,0,0.4);
+      border-radius: 9999px;
+      backdrop-filter: blur(10px);
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div class="overlay"></div>
+
+  <!-- 顶部信息 -->
+  <div class="ui header">WINDOW REVERIE</div>
+  <div class="ui title" id="scene-title">雨夜玻璃窗</div>
+  <div class="ui subtitle" id="scene-subtitle">Vibe Coding · 不同风景，不同雨声</div>
+
+  <!-- 场景选择器 -->
+  <div class="ui scenes-bar">
+    <div class="scenes-label" data-i18n="scenes_label">窗外风景</div>
+    <div class="scene-btn active" data-scene="night-rain" onclick="switchScene('night-rain')">雨夜城市</div>
+    <div class="scene-btn" data-scene="forest-dusk" onclick="switchScene('forest-dusk')">暮色松林</div>
+    <div class="scene-btn" data-scene="bamboo-rain" onclick="switchScene('bamboo-rain')">竹林细雨</div>
+    <div class="scene-btn" data-scene="stormy-sea" onclick="switchScene('stormy-sea')">暴风雨海</div>
+    <div class="scene-btn" data-scene="alps-morning" onclick="switchScene('alps-morning')">阿尔卑斯晨雾</div>
+    <div class="scene-btn" data-scene="mountain-lake" onclick="switchScene('mountain-lake')">山湖晨光</div>
+  </div>
+
+  <!-- 天气情绪（可叠加在任何场景上） -->
+  <div class="ui weather-bar">
+    <div class="scenes-label">天气调性</div>
+    <button class="btn" onclick="setMood('gentle')">温柔</button>
+    <button class="btn" onclick="setMood('heavy')">暴雨</button>
+    <button class="btn" onclick="setMood('quiet')">细雨</button>
+    <button class="btn" onclick="setMood('neon')">霓虹</button>
+    <button class="btn" onclick="setMood('clear')">几乎无雨</button>
+    <button class="btn ghost" onclick="randomize()">随机</button>
+  </div>
+
+  <!-- 窗外清晰度控制 -->
+  <div class="ui clarity-bar">
+    <div class="scenes-label">窗外清晰度</div>
+    <button class="btn" onclick="setClarity('dreamy')">梦幻</button>
+    <button class="btn" onclick="setClarity('soft')">柔和</button>
+    <button class="btn" onclick="setClarity('natural')">自然</button>
+    <button class="btn" onclick="setClarity('sharp')">通透</button>
+  </div>
+
+  <!-- 全屏按钮 -->
+  <div class="ui fullscreen-btn" onclick="toggleFullscreen()">⛶ <span data-i18n="fullscreen">全屏沉浸</span></div>
+
+  <!-- 语言切换器 -->
+  <div class="ui lang-switcher">
+    <span class="lang-btn active" data-lang="zh" onclick="setLanguage('zh')">中</span>
+    <span class="lang-btn" data-lang="en" onclick="setLanguage('en')">EN</span>
+    <span class="lang-btn" data-lang="vi" onclick="setLanguage('vi')">VI</span>
+    <span class="lang-btn" data-lang="ko" onclick="setLanguage('ko')">한국</span>
+  </div>
+
+  <div class="ui hint" data-i18n="hint">
+    点击风景切换世界 &nbsp;•&nbsp; 清晰度控制玻璃后的朦胧感<br>
+    全屏按钮提升沉浸感 &nbsp;•&nbsp; 控制台可随意微调 <span style="font-family:monospace">fx.options</span>
+  </div>
+
+  <div class="ui status" id="status" data-i18n="status_ready">正在加载玻璃窗引擎...</div>
+
+  <script src="./base-repo/bundle/index.js"></script>
+  <script>
+    const canvas = document.getElementById('canvas');
+    const statusEl = document.getElementById('status');
+    const titleEl = document.getElementById('scene-title');
+    const subtitleEl = document.getElementById('scene-subtitle');
+
+    // ==================== 场景数据库 ====================
+    // 每个场景都有专属推荐的雨/雾/光影参数，切换时自动应用
+    const scenes = {
+      'night-rain': {
+        name: '雨夜城市',
+        subtitle: '深夜的霓虹与雨声',
+        background: './assets/original/night-city.jpg',
+        options: {
+          spawnSize: [42, 78], spawnInterval: [0.06, 0.14], dropletsPerSeconds: 480,
+          mistColor: [0.009, 0.01, 0.013, 0.92], refractBase: 0.36, refractScale: 0.55,
+          gravity: 2100, mistTime: 12, raindropDiffuseLight: [0.22, 0.22, 0.26]
+        }
+      },
+      'forest-dusk': {
+        name: '暮色松林',
+        subtitle: '蓝调时分的森林呼吸',
+        background: './assets/scenes/forest-dusk.jpg',
+        options: {
+          spawnSize: [28, 55], spawnInterval: [0.09, 0.19], dropletsPerSeconds: 290,
+          mistColor: [0.006, 0.009, 0.012, 0.78], refractBase: 0.30, refractScale: 0.46,
+          gravity: 1720, mistTime: 22, raindropDiffuseLight: [0.18, 0.22, 0.18]
+        }
+      },
+      'bamboo-rain': {
+        name: '竹林细雨',
+        subtitle: '江南的竹与雨',
+        background: './assets/scenes/bamboo-rain.jpg',
+        options: {
+          spawnSize: [22, 48], spawnInterval: [0.10, 0.22], dropletsPerSeconds: 240,
+          mistColor: [0.007, 0.011, 0.009, 0.72], refractBase: 0.29, refractScale: 0.44,
+          gravity: 1580, mistTime: 26, raindropDiffuseLight: [0.16, 0.21, 0.15]
+        }
+      },
+      'stormy-sea': {
+        name: '暴风雨海',
+        subtitle: '海浪与玻璃的对话',
+        background: './assets/scenes/stormy-sea.jpg',
+        options: {
+          spawnSize: [52, 105], spawnInterval: [0.035, 0.075], dropletsPerSeconds: 780,
+          mistColor: [0.014, 0.015, 0.018, 0.96], refractBase: 0.52, refractScale: 0.68,
+          gravity: 2950, mistTime: 7, raindropDiffuseLight: [0.25, 0.26, 0.30]
+        }
+      },
+      'alps-morning': {
+        name: '阿尔卑斯晨雾',
+        subtitle: '雪山与薄雾的安静',
+        background: './assets/scenes/alps-morning.jpg',
+        options: {
+          spawnSize: [18, 38], spawnInterval: [0.14, 0.32], dropletsPerSeconds: 95,
+          mistColor: [0.004, 0.006, 0.009, 0.55], refractBase: 0.26, refractScale: 0.38,
+          gravity: 980, mistTime: 38, raindropDiffuseLight: [0.32, 0.33, 0.38]
+        }
+      },
+      'mountain-lake': {
+        name: '山湖晨光',
+        subtitle: '平静湖面与第一缕光',
+        background: './assets/scenes/mountain-lake.jpg',
+        options: {
+          spawnSize: [15, 32], spawnInterval: [0.18, 0.38], dropletsPerSeconds: 60,
+          mistColor: [0.003, 0.005, 0.007, 0.42], refractBase: 0.24, refractScale: 0.36,
+          gravity: 820, mistTime: 48, raindropDiffuseLight: [0.35, 0.32, 0.28]
+        }
+      }
+    };
+
+    let currentSceneId = 'night-rain';
+    let currentLang = 'zh';
+
+    // ==================== 多语言支持 (zh, en, vi, ko) ====================
+    const i18n = {
+      zh: {
+        scenes_label: '窗外风景',
+        clarity_label: '窗外清晰度',
+        weather_label: '天气调性',
+        fullscreen: '全屏沉浸',
+        hint: '点击风景切换世界 • 清晰度控制玻璃后的朦胧感<br>全屏按钮提升沉浸感 • 控制台可随意微调 <span style="font-family:monospace">fx.options</span>',
+        status_ready: '玻璃窗已就绪 · 试着切换不同风景',
+        clarity_dreamy: '梦幻',
+        clarity_soft: '柔和',
+        clarity_natural: '自然',
+        clarity_sharp: '通透',
+        mood_gentle: '温柔',
+        mood_heavy: '暴雨',
+        mood_quiet: '细雨',
+        mood_neon: '霓虹',
+        mood_clear: '几乎无雨',
+        randomize: '随机',
+        scene_night_rain: '雨夜城市',
+        scene_forest_dusk: '暮色松林',
+        scene_bamboo_rain: '竹林细雨',
+        scene_stormy_sea: '暴风雨海',
+        scene_alps_morning: '阿尔卑斯晨雾',
+        scene_mountain_lake: '山湖晨光',
+      },
+      en: {
+        scenes_label: 'Outside View',
+        clarity_label: 'Window Clarity',
+        weather_label: 'Weather',
+        fullscreen: 'Fullscreen',
+        hint: 'Click scenes to change the world • Clarity controls how hazy it feels<br>Fullscreen for immersion • Tweak any <span style="font-family:monospace">fx.options</span> in console',
+        status_ready: 'Window ready · Try switching views',
+        clarity_dreamy: 'Dreamy',
+        clarity_soft: 'Soft',
+        clarity_natural: 'Natural',
+        clarity_sharp: 'Sharp',
+        mood_gentle: 'Gentle',
+        mood_heavy: 'Heavy',
+        mood_quiet: 'Light',
+        mood_neon: 'Neon',
+        mood_clear: 'Clear',
+        randomize: 'Random',
+        scene_night_rain: 'Rainy City Night',
+        scene_forest_dusk: 'Forest at Dusk',
+        scene_bamboo_rain: 'Bamboo Grove',
+        scene_stormy_sea: 'Stormy Sea',
+        scene_alps_morning: 'Alps Morning Mist',
+        scene_mountain_lake: 'Mountain Lake Dawn',
+      },
+      vi: {
+        scenes_label: 'Cảnh ngoài cửa sổ',
+        clarity_label: 'Độ trong suốt',
+        weather_label: 'Thời tiết',
+        fullscreen: 'Toàn màn hình',
+        hint: 'Nhấn để đổi cảnh • Độ trong suốt điều khiển mức mờ<br>Toàn màn hình để đắm chìm • Tùy chỉnh <span style="font-family:monospace">fx.options</span> trong console',
+        status_ready: 'Cửa sổ sẵn sàng · Thử đổi cảnh',
+        clarity_dreamy: 'Mơ màng',
+        clarity_soft: 'Mềm mại',
+        clarity_natural: 'Tự nhiên',
+        clarity_sharp: 'Rõ nét',
+        mood_gentle: 'Nhẹ nhàng',
+        mood_heavy: 'Mưa lớn',
+        mood_quiet: 'Mưa phùn',
+        mood_neon: 'Neon',
+        mood_clear: 'Trong suốt',
+        randomize: 'Ngẫu nhiên',
+        scene_night_rain: 'Đêm mưa thành phố',
+        scene_forest_dusk: 'Rừng hoàng hôn',
+        scene_bamboo_rain: 'Rừng trúc mưa',
+        scene_stormy_sea: 'Biển bão tố',
+        scene_alps_morning: 'Sương Alps',
+        scene_mountain_lake: 'Hồ núi bình minh',
+      },
+      ko: {
+        scenes_label: '창밖 풍경',
+        clarity_label: '창밖 선명도',
+        weather_label: '날씨',
+        fullscreen: '전체화면',
+        hint: '풍경을 클릭해 세계를 바꾸세요 • 선명도는 유리 너머의 흐림을 조절합니다<br>전체화면으로 몰입감을 높이세요 • 콘솔에서 <span style="font-family:monospace">fx.options</span> 자유 조정',
+        status_ready: '창 준비 완료 · 다른 풍경을 시도해보세요',
+        clarity_dreamy: '몽환적',
+        clarity_soft: '부드러움',
+        clarity_natural: '자연',
+        clarity_sharp: '선명',
+        mood_gentle: '잔잔한',
+        mood_heavy: '폭우',
+        mood_quiet: '가랑비',
+        mood_neon: '네온',
+        mood_clear: '맑음',
+        randomize: '랜덤',
+        scene_night_rain: '빗속 도시 야경',
+        scene_forest_dusk: '황혼의 숲',
+        scene_bamboo_rain: '대나무 숲 비',
+        scene_stormy_sea: '폭풍우 바다',
+        scene_alps_morning: '알프스 아침 안개',
+        scene_mountain_lake: '산속 호수 새벽',
+      }
+    };
+
+    function applyLanguage(lang) {
+      currentLang = lang;
+      const t = i18n[lang] || i18n.zh;
+
+      // 更新带 data-i18n 的元素
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.dataset.i18n;
+        if (t[key]) el.innerHTML = t[key];
+      });
+
+      // 更新场景按钮文字
+      const sceneNameMap = {
+        'night-rain': t.scene_night_rain,
+        'forest-dusk': t.scene_forest_dusk,
+        'bamboo-rain': t.scene_bamboo_rain,
+        'stormy-sea': t.scene_stormy_sea,
+        'alps-morning': t.scene_alps_morning,
+        'mountain-lake': t.scene_mountain_lake,
+      };
+
+      document.querySelectorAll('.scene-btn').forEach(btn => {
+        const sid = btn.dataset.scene;
+        if (sceneNameMap[sid]) btn.textContent = sceneNameMap[sid];
+      });
+
+      // 更新天气按钮
+      const weatherBtns = document.querySelectorAll('.weather-bar .btn');
+      const weatherLabels = ['gentle','heavy','quiet','neon','clear','randomize'];
+      weatherBtns.forEach((btn, i) => {
+        const key = 'mood_' + weatherLabels[i];
+        if (t[key]) btn.textContent = t[key];
+      });
+
+      // 更新清晰度按钮
+      const clarityBtns = document.querySelectorAll('.clarity-bar .btn');
+      const clarityLabels = ['clarity_dreamy','clarity_soft','clarity_natural','clarity_sharp'];
+      clarityBtns.forEach((btn, i) => {
+        if (t[clarityLabels[i]]) btn.textContent = t[clarityLabels[i]];
+      });
+
+      // 高亮当前语言按钮
+      document.querySelectorAll('.lang-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.lang === lang);
+      });
+
+      // 更新当前场景的标题和副标题
+      if (scenes[currentSceneId]) {
+        const scene = scenes[currentSceneId];
+        titleEl.textContent = sceneNameMap[currentSceneId] || scene.name;
+        subtitleEl.textContent = (scene.subtitle || '') + (lang === 'zh' ? ' · Vibe Coding' : ' · Vibe');
+      }
+    }
+
+    function setLanguage(lang) {
+      applyLanguage(lang);
+      // 语言切换后提示
+      console.log('%c[窗景] 语言已切换为 ' + lang, 'color:#64748b');
+    }
+
+    function resizeCanvas() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = window.innerWidth * dpr;
+      canvas.height = window.innerHeight * dpr;
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+    }
+
+    window.addEventListener('resize', () => {
+      if (window.fx) {
+        resizeCanvas();
+        window.fx.resize(canvas.width, canvas.height);
+      }
+    });
+
+    let fx = null;
+
+    async function startRain(options = {}) {
+      resizeCanvas();
+      if (fx) fx.stop();
+
+      fx = new RaindropFX({
+        canvas: canvas,
+        background: scenes[currentSceneId].background,
+        ...options
+      });
+      window.fx = fx;
+      statusEl.textContent = i18n[currentLang].status_ready;
+      await fx.start();
+    }
+
+    // 核心：切换不同窗外世界
+    async function switchScene(sceneId) {
+      if (!scenes[sceneId] || !window.fx) return;
+
+      currentSceneId = sceneId;
+      const scene = scenes[sceneId];
+
+      titleEl.textContent = scene.name;
+      subtitleEl.textContent = scene.subtitle + ' · Vibe Coding';
+
+      // 高亮按钮（使用 data 属性，语言切换后依然正确）
+      document.querySelectorAll('.scene-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.scene === sceneId);
+      });
+
+      await window.fx.setBackground(scene.background);
+
+      const o = window.fx.options;
+      Object.assign(o, scene.options);
+
+      console.log(`%c[窗景] 已切换至「${scene.name}」`, 'color:#64748b');
+    }
+
+    // 天气情绪（可叠加在任意场景上）
+    function setMood(mood) {
+      if (!window.fx) return;
+      const o = window.fx.options;
+
+      switch (mood) {
+        case 'gentle':
+          o.spawnSize = [28, 52]; o.spawnInterval = [0.08, 0.17]; o.dropletsPerSeconds = 260;
+          o.mistColor = [0.007, 0.009, 0.012, 0.78]; o.gravity = 1650; o.mistTime = 19; break;
+        case 'heavy':
+          o.spawnSize = [48, 98]; o.spawnInterval = [0.03, 0.065]; o.dropletsPerSeconds = 850;
+          o.mistColor = [0.014, 0.015, 0.017, 0.98]; o.gravity = 2850; o.mistTime = 6; break;
+        case 'quiet':
+          o.spawnSize = [20, 40]; o.spawnInterval = [0.11, 0.26]; o.dropletsPerSeconds = 145;
+          o.mistColor = [0.004, 0.006, 0.008, 0.62]; o.gravity = 1280; o.mistTime = 30; break;
+        case 'neon':
+          o.spawnSize = [36, 82]; o.spawnInterval = [0.05, 0.10]; o.dropletsPerSeconds = 610;
+          o.mistColor = [0.018, 0.007, 0.028, 0.88]; o.raindropDiffuseLight = [0.38, 0.26, 0.52]; break;
+        case 'clear':
+          o.spawnSize = [12, 26]; o.spawnInterval = [0.22, 0.45]; o.dropletsPerSeconds = 28;
+          o.mistColor = [0.002, 0.003, 0.005, 0.28]; o.gravity = 720; o.mistTime = 55; break;
+      }
+      console.log(`%c[窗景] 天气调性已调整为「${mood}」`, 'color:#64748b');
+    }
+
+    function randomize() {
+      if (!window.fx) return;
+      const o = window.fx.options;
+      o.spawnSize = [18 + Math.random()*75, 42 + Math.random()*70];
+      o.spawnInterval = [0.04 + Math.random()*0.14, 0.08 + Math.random()*0.18];
+      o.dropletsPerSeconds = 80 + Math.random()*820;
+      o.gravity = 950 + Math.random()*2100;
+      o.mistTime = 6 + Math.random()*42;
+      console.log('%c[窗景] 随机调性已应用', 'color:#64748b');
+    }
+
+    // ==================== 新功能：窗外清晰度 + 全屏 ====================
+
+    // 窗外清晰度控制（核心是 background 模糊 + 雨滴折射强度）
+    function setClarity(level) {
+      if (!window.fx) return;
+      const o = window.fx.options;
+
+      switch (level) {
+        case 'dreamy':
+          o.backgroundBlurSteps = 4;
+          o.refractBase = 0.55;
+          o.refractScale = 0.82;
+          if (o.mistColor) o.mistColor[3] = Math.min((o.mistColor[3] || 0.7) + 0.12, 0.98);
+          break;
+        case 'soft':
+          o.backgroundBlurSteps = 3;
+          o.refractBase = 0.42;
+          o.refractScale = 0.62;
+          break;
+        case 'natural':
+          o.backgroundBlurSteps = 2;
+          o.refractBase = 0.32;
+          o.refractScale = 0.48;
+          break;
+        case 'sharp':
+          o.backgroundBlurSteps = 1;
+          o.refractBase = 0.22;
+          o.refractScale = 0.32;
+          if (o.mistColor) o.mistColor[3] = Math.max((o.mistColor[3] || 0.7) - 0.18, 0.12);
+          break;
+      }
+
+      // 强制重新处理背景纹理，让模糊和折射变化立即生效
+      const bg = scenes[currentSceneId].background;
+      window.fx.setBackground(bg);
+
+      console.log(`%c[窗景] 清晰度已调整为「${level}」`, 'color:#64748b');
+    }
+
+    // 全屏沉浸模式
+    function toggleFullscreen() {
+      const elem = document.documentElement;
+
+      if (!document.fullscreenElement) {
+        if (elem.requestFullscreen) {
+          elem.requestFullscreen();
+        } else if (elem.webkitRequestFullscreen) {
+          elem.webkitRequestFullscreen();
+        } else if (elem.msRequestFullscreen) {
+          elem.msRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) {
+          document.msExitFullscreen();
+        }
+      }
+    }
+
+    async function init() {
+      currentSceneId = 'night-rain';
+      currentLang = 'zh';
+      applyLanguage('zh');   // 初始化语言
+
+      await startRain({ ...scenes['night-rain'].options });
+
+      document.querySelectorAll('.scene-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.scene === 'night-rain');
+      });
+
+      setTimeout(() => { if (statusEl) statusEl.style.opacity = '0.35'; }, 2800);
+
+      console.log('%c[窗景] 已就绪！支持多语言切换（右上角），也可以在控制台微调 fx.options', 'color:#64748b');
+    }
+
+    window.addEventListener('load', init);
+    window.switchScene = switchScene;
+    window.setMood = setMood;
+    window.setClarity = setClarity;
+    window.toggleFullscreen = toggleFullscreen;
+    window.setLanguage = setLanguage;
+  </script>
+</body>
+</html>

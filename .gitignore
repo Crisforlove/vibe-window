@@ -1,0 +1,27 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Dependencies (if any node stuff added later)
+node_modules/
+package-lock.json
+
+# Build / temp
+dist/
+build/
+*.log
+
+# Local only
+.env
+*.local
+
+# Large media (if user adds very large videos later)
+*.mp4
+*.mov
+*.avi

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raindrop Effect</title>
+    <link rel="stylesheet" href="./assets/css/style.css">
+    <script src="./bundle/index.js"></script>
+</head>
+
+<body>
+    <div id="root">
+        <canvas id="canvas"></canvas>
+        <p id="loading">Loading...</p>
+    </div>
+    <script>
+        const canvas = document.querySelector("#canvas");
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
+        const raindropFx = new RaindropFX({
+            canvas: canvas,
+            background: "assets/img/84765992_p0.jpg",
+        });
+
+        window.onresize = () =>
+        {
+            const rect = canvas.getBoundingClientRect();
+            raindropFx.resize(rect.width, rect.height);
+        }
+
+        raindropFx.start();
+    </script>
+</body>
+
+</html>
