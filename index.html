@@ -1246,7 +1246,7 @@
 
       switch (level) {
         case 'dreamy':
-          o.backgroundBlurSteps = 3;   // 限制最高模糊度，避免背景差异过大
+          o.backgroundBlurSteps = 2;   // 固定基础模糊度，清晰度主要通过折射和雾气控制
           o.refractBase = 0.55;
           o.refractScale = 0.82;
           if (o.mistColor) o.mistColor[3] = Math.min((o.mistColor[3] || 0.7) + 0.12, 0.95);
@@ -1262,18 +1262,18 @@
           o.refractScale = 0.48;
           break;
         case 'sharp':
-          o.backgroundBlurSteps = 1;
+          o.backgroundBlurSteps = 2;
           o.refractBase = 0.22;
           o.refractScale = 0.32;
           if (o.mistColor) o.mistColor[3] = Math.max((o.mistColor[3] || 0.7) - 0.15, 0.15);
           break;
 
-        case 'clear':  // 完全通透 - 只让玻璃更干净，背景基础清晰度保持相对稳定
-          o.backgroundBlurSteps = 1;   // 不再设为0，减少背景突然变锐利的跳跃感
+        case 'clear':  // 完全通透 - 背景基础清晰度完全固定，只让玻璃本身干净
+          o.backgroundBlurSteps = 2;   // 完全固定，不再随清晰度变化
           o.refractBase = 0.10;
           o.refractScale = 0.18;
           if (o.mistColor) o.mistColor[3] = 0.06;
-          // 雨量完全不受清晰度影响，由当前风景 + 天气调性决定
+          // 雨量完全不受清晰度影响
           break;
       }
 
