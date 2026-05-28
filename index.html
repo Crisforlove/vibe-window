@@ -1218,8 +1218,8 @@
           dreamy: 1.0, 
           soft: 0.85, 
           natural: 0.7, 
-          sharp: 0.35,
-          clear: 0.08   // 完全通透时环境声几乎消失
+          sharp: 0.4,
+          clear: 0.25   // 完全通透时声音明显变轻，但不会消失
         };
         intensity *= (clarityMap[clarityLevel] || 0.7);
       }
@@ -1259,18 +1259,12 @@
           if (o.mistColor) o.mistColor[3] = Math.max((o.mistColor[3] || 0.7) - 0.18, 0.12);
           break;
 
-        case 'clear':  // 完全通透 - 几乎没有雨和雾
+        case 'clear':  // 完全通透 - 玻璃几乎干净，背景最清晰
           o.backgroundBlurSteps = 0;
           o.refractBase = 0.08;
           o.refractScale = 0.15;
           if (o.mistColor) o.mistColor[3] = 0.04;
-
-          // 同时大幅降低实际雨滴数量，让玻璃真正“干净”
-          o.spawnSize = [6, 14];
-          o.spawnInterval = [0.35, 0.8];
-          o.dropletsPerSeconds = 8;
-          o.gravity = 600;
-          o.mistTime = 80;
+          // 注意：不再降低雨滴数量，雨量由当前风景+天气决定，只改变“看”得清不清楚
           break;
       }
 
