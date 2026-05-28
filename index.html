@@ -468,6 +468,7 @@
 
     let currentSceneId = 'night-rain';
     let currentLang = 'zh';
+    let currentClarity = 'natural';  // 用于效果层根据清晰度调整强度
 
     // ==================== 程序化环境白噪音 (Web Audio API) - 增强版 ====================
     class RainAmbience {
@@ -807,7 +808,10 @@
 
       // === 柔和漂浮雾气层 ===
       effectsCtx.fillStyle = 'rgba(220, 225, 235, 0.18)';
-      effectsCtx.globalAlpha = (currentScene === 'alps-morning' || currentScene === 'mountain-lake') ? 0.32 : 0.22;
+      let fogAlpha = (currentScene === 'alps-morning' || currentScene === 'mountain-lake') ? 0.32 : 0.22;
+      if (currentClarity === 'clear') fogAlpha *= 0.3;
+      if (currentClarity === 'sharp') fogAlpha *= 0.6;
+      effectsCtx.globalAlpha = fogAlpha;
 
       for (let i = 0; i < 5; i++) {
         const y = (h * (0.2 + i * 0.15) + Math.sin(fogOffset * 0.6 + i) * 25) % (h * 1.1);
@@ -819,9 +823,14 @@
       // === 场景粒子 (树叶 / 光尘 / 雪花感) ===
       particleTime += 1;
 
+      let particleAlpha = (currentScene === 'alps-morning' || currentScene === 'mountain-lake') 
+        ? 0.7 : 0.65;
+      if (currentClarity === 'clear') particleAlpha *= 0.25;
+      if (currentClarity === 'sharp') particleAlpha *= 0.55;
+
       effectsCtx.fillStyle = (currentScene === 'alps-morning' || currentScene === 'mountain-lake') 
-        ? 'rgba(245, 248, 255, 0.7)' 
-        : 'rgba(200, 210, 180, 0.65)';
+        ? `rgba(245, 248, 255, ${particleAlpha})` 
+        : `rgba(200, 210, 180, ${particleAlpha})`;
 
       particles.forEach((p, index) => {
         p.y += p.speed * (currentScene.includes('mountain') || currentScene.includes('lake') ? 0.6 : 1.4);
@@ -1237,13 +1246,13 @@
 
       switch (level) {
         case 'dreamy':
-          o.backgroundBlurSteps = 4;
+          o.backgroundBlurSteps = 3;   // 限制最高模糊度，避免背景差异过大
           o.refractBase = 0.55;
           o.refractScale = 0.82;
-          if (o.mistColor) o.mistColor[3] = Math.min((o.mistColor[3] || 0.7) + 0.12, 0.98);
+          if (o.mistColor) o.mistColor[3] = Math.min((o.mistColor[3] || 0.7) + 0.12, 0.95);
           break;
         case 'soft':
-          o.backgroundBlurSteps = 3;
+          o.backgroundBlurSteps = 2;
           o.refractBase = 0.42;
           o.refractScale = 0.62;
           break;
@@ -1256,15 +1265,15 @@
           o.backgroundBlurSteps = 1;
           o.refractBase = 0.22;
           o.refractScale = 0.32;
-          if (o.mistColor) o.mistColor[3] = Math.max((o.mistColor[3] || 0.7) - 0.18, 0.12);
+          if (o.mistColor) o.mistColor[3] = Math.max((o.mistColor[3] || 0.7) - 0.15, 0.15);
           break;
 
-        case 'clear':  // 完全通透 - 玻璃几乎干净，背景最清晰
-          o.backgroundBlurSteps = 0;
-          o.refractBase = 0.08;
-          o.refractScale = 0.15;
-          if (o.mistColor) o.mistColor[3] = 0.04;
-          // 注意：不再降低雨滴数量，雨量由当前风景+天气决定，只改变“看”得清不清楚
+        case 'clear':  // 完全通透 - 只让玻璃更干净，背景基础清晰度保持相对稳定
+          o.backgroundBlurSteps = 1;   // 不再设为0，减少背景突然变锐利的跳跃感
+          o.refractBase = 0.10;
+          o.refractScale = 0.18;
+          if (o.mistColor) o.mistColor[3] = 0.06;
+          // 雨量完全不受清晰度影响，由当前风景 + 天气调性决定
           break;
       }
 
@@ -1274,6 +1283,8 @@
 
       // 同步环境声音强度
       updateAmbienceForScene(currentSceneId, level);
+
+      currentClarity = level;
 
       console.log(`%c[窗景] 清晰度已调整为「${level}」`, 'color:#64748b');
     }
