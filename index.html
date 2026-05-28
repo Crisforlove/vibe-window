@@ -154,27 +154,29 @@
     .clarity-bar { bottom: 78px; }
     .weather-bar { bottom: 36px; }
 
-    /* 左侧控制面板 - 默认折叠，鼠标靠近时展开 */
+    /* 左侧控制面板 - 默认折叠，鼠标靠近时展开（只覆盖控制栏高度） */
     #left-panel {
       position: fixed;
       left: 0;
-      top: 0;
-      bottom: 0;
+      bottom: 20px;
       width: 14px;
-      background: linear-gradient(to right, rgba(0,0,0,0.35), rgba(0,0,0,0.08));
+      height: 175px;           /* 合适高度，只覆盖三个控制栏区域 */
+      background: linear-gradient(to right, rgba(0,0,0,0.38), rgba(0,0,0,0.1));
       backdrop-filter: blur(12px);
       z-index: 25;
       transition: width 0.28s cubic-bezier(0.23, 1, 0.32, 1);
       overflow: hidden;
       border-right: 1px solid rgba(255,255,255,0.06);
+      border-top-right-radius: 8px;
+      border-bottom-right-radius: 8px;
     }
 
     #left-panel:hover {
       width: 340px;
-      background: rgba(0, 0, 0, 0.42);
+      background: rgba(0, 0, 0, 0.45);
     }
 
-    /* 折叠时的视觉提示 */
+    /* 折叠时的视觉提示（只在面板高度内显示） */
     #left-panel::before {
       content: '';
       position: absolute;
@@ -182,14 +184,14 @@
       top: 50%;
       transform: translateY(-50%);
       width: 3px;
-      height: 60px;
-      background: rgba(255,255,255,0.25);
+      height: 70px;
+      background: rgba(255,255,255,0.28);
       border-radius: 3px;
       transition: opacity 0.2s ease;
     }
 
     #left-panel:hover::before {
-      opacity: 0.3;
+      opacity: 0.25;
     }
 
     #left-panel .inner {
