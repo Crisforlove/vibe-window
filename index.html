@@ -154,6 +154,74 @@
     .clarity-bar { bottom: 78px; }
     .weather-bar { bottom: 36px; }
 
+    /* 左侧控制面板 - 默认折叠，鼠标靠近时展开 */
+    #left-panel {
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 14px;
+      background: linear-gradient(to right, rgba(0,0,0,0.35), rgba(0,0,0,0.08));
+      backdrop-filter: blur(12px);
+      z-index: 25;
+      transition: width 0.28s cubic-bezier(0.23, 1, 0.32, 1);
+      overflow: hidden;
+      border-right: 1px solid rgba(255,255,255,0.06);
+    }
+
+    #left-panel:hover {
+      width: 340px;
+      background: rgba(0, 0, 0, 0.42);
+    }
+
+    /* 折叠时的视觉提示 */
+    #left-panel::before {
+      content: '';
+      position: absolute;
+      left: 3px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 60px;
+      background: rgba(255,255,255,0.25);
+      border-radius: 3px;
+      transition: opacity 0.2s ease;
+    }
+
+    #left-panel:hover::before {
+      opacity: 0.3;
+    }
+
+    #left-panel .inner {
+      position: absolute;
+      left: 18px;
+      top: 0;
+      bottom: 0;
+      width: 320px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 0 0 20px 12px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      pointer-events: none;
+    }
+
+    #left-panel:hover .inner {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* 让原来的三个 bar 脱离绝对定位，改成相对布局 */
+    .scenes-bar, .clarity-bar, .weather-bar {
+      position: relative !important;
+      left: auto !important;
+      bottom: auto !important;
+      width: auto;
+      margin: 0;
+    }
+
     .scenes-label {
       font-size: 11px;
       letter-spacing: 1.5px;
@@ -317,6 +385,20 @@
       backdrop-filter: blur(10px);
       opacity: 0.7;
     }
+
+    /* 顶部信息 - 切换时显示，几秒后淡出增加沉浸感 */
+    .ui.header,
+    .ui.title,
+    .ui.subtitle {
+      transition: opacity 1.2s ease;
+    }
+
+    .ui.header.hidden,
+    .ui.title.hidden,
+    .ui.subtitle.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -330,36 +412,41 @@
   <div class="ui title" id="scene-title">雨夜玻璃窗</div>
   <div class="ui subtitle" id="scene-subtitle">Vibe Coding · 不同风景，不同雨声</div>
 
-  <!-- 场景选择器 -->
-  <div class="ui scenes-bar">
-    <div class="scenes-label" data-i18n="scenes_label">窗外风景</div>
-    <div class="scene-btn active" data-scene="night-rain" onclick="switchScene('night-rain')">雨夜城市</div>
-    <div class="scene-btn" data-scene="forest-dusk" onclick="switchScene('forest-dusk')">暮色松林</div>
-    <div class="scene-btn" data-scene="bamboo-rain" onclick="switchScene('bamboo-rain')">竹林细雨</div>
-    <div class="scene-btn" data-scene="stormy-sea" onclick="switchScene('stormy-sea')">暴风雨海</div>
-    <div class="scene-btn" data-scene="alps-morning" onclick="switchScene('alps-morning')">阿尔卑斯晨雾</div>
-    <div class="scene-btn" data-scene="mountain-lake" onclick="switchScene('mountain-lake')">山湖晨光</div>
-  </div>
+  <!-- 左侧可折叠控制面板（鼠标靠近左侧边缘时展开） -->
+  <div id="left-panel">
+    <div class="inner">
+      <!-- 场景选择器 -->
+      <div class="ui scenes-bar">
+        <div class="scenes-label" data-i18n="scenes_label">窗外风景</div>
+        <div class="scene-btn active" data-scene="night-rain" onclick="switchScene('night-rain')">雨夜城市</div>
+        <div class="scene-btn" data-scene="forest-dusk" onclick="switchScene('forest-dusk')">暮色松林</div>
+        <div class="scene-btn" data-scene="bamboo-rain" onclick="switchScene('bamboo-rain')">竹林细雨</div>
+        <div class="scene-btn" data-scene="stormy-sea" onclick="switchScene('stormy-sea')">暴风雨海</div>
+        <div class="scene-btn" data-scene="alps-morning" onclick="switchScene('alps-morning')">阿尔卑斯晨雾</div>
+        <div class="scene-btn" data-scene="mountain-lake" onclick="switchScene('mountain-lake')">山湖晨光</div>
+      </div>
 
-  <!-- 天气情绪（可叠加在任何场景上） -->
-  <div class="ui weather-bar">
-    <div class="scenes-label">天气调性</div>
-    <button class="btn" onclick="setMood('gentle')">温柔</button>
-    <button class="btn" onclick="setMood('heavy')">暴雨</button>
-    <button class="btn" onclick="setMood('quiet')">细雨</button>
-    <button class="btn" onclick="setMood('neon')">霓虹</button>
-    <button class="btn" onclick="setMood('clear')">几乎无雨</button>
-    <button class="btn ghost" onclick="randomize()">随机</button>
-  </div>
+      <!-- 天气情绪 -->
+      <div class="ui weather-bar">
+        <div class="scenes-label">天气调性</div>
+        <button class="btn" onclick="setMood('gentle')">温柔</button>
+        <button class="btn" onclick="setMood('heavy')">暴雨</button>
+        <button class="btn" onclick="setMood('quiet')">细雨</button>
+        <button class="btn" onclick="setMood('neon')">霓虹</button>
+        <button class="btn" onclick="setMood('clear')">几乎无雨</button>
+        <button class="btn ghost" onclick="randomize()">随机</button>
+      </div>
 
-  <!-- 窗外清晰度控制 -->
-  <div class="ui clarity-bar">
-    <div class="scenes-label">窗外清晰度</div>
-    <button class="btn" onclick="setClarity('dreamy')">梦幻</button>
-    <button class="btn" onclick="setClarity('soft')">柔和</button>
-    <button class="btn" onclick="setClarity('natural')">自然</button>
-    <button class="btn" onclick="setClarity('sharp')">通透</button>
-    <button class="btn" onclick="setClarity('clear')">完全通透</button>
+      <!-- 窗外清晰度控制 -->
+      <div class="ui clarity-bar">
+        <div class="scenes-label">窗外清晰度</div>
+        <button class="btn" onclick="setClarity('dreamy')">梦幻</button>
+        <button class="btn" onclick="setClarity('soft')">柔和</button>
+        <button class="btn" onclick="setClarity('natural')">自然</button>
+        <button class="btn" onclick="setClarity('sharp')">通透</button>
+        <button class="btn" onclick="setClarity('clear')">完全通透</button>
+      </div>
+    </div>
   </div>
 
   <!-- 环境白噪音控制 -->
@@ -380,10 +467,7 @@
     <span class="lang-btn" data-lang="ko" onclick="setLanguage('ko')">한국</span>
   </div>
 
-  <div class="ui hint" data-i18n="hint">
-    点击风景切换世界 &nbsp;•&nbsp; 清晰度控制玻璃后的朦胧感<br>
-    全屏按钮提升沉浸感 &nbsp;•&nbsp; 控制台可随意微调 <span style="font-family:monospace">fx.options</span>
-  </div>
+  <!-- 右下角提示文字已移除（按用户要求） -->
 
   <div class="ui status" id="status" data-i18n="status_ready">正在加载玻璃窗引擎...</div>
 
@@ -1094,6 +1178,24 @@
         btn.classList.toggle('active', btn.dataset.scene === sceneId);
       });
 
+      // 顶部文字显示 + 几秒后淡出（增加沉浸感）
+      const header = document.querySelector('.ui.header');
+      const title = document.getElementById('scene-title');
+      const subtitle = document.getElementById('scene-subtitle');
+
+      if (header) header.classList.remove('hidden');
+      if (title) title.classList.remove('hidden');
+      if (subtitle) subtitle.classList.remove('hidden');
+
+      // 清除之前的定时器
+      if (window.topTextTimeout) clearTimeout(window.topTextTimeout);
+
+      window.topTextTimeout = setTimeout(() => {
+        if (header) header.classList.add('hidden');
+        if (title) title.classList.add('hidden');
+        if (subtitle) subtitle.classList.add('hidden');
+      }, 3800);
+
       await window.fx.setBackground(scene.background);
 
       const o = window.fx.options;
@@ -1336,6 +1438,16 @@
 
       // 启动初始大气效果
       startAtmosphere('night-rain');
+
+      // 初始显示顶部文字，几秒后淡出
+      setTimeout(() => {
+        const header = document.querySelector('.ui.header');
+        const title = document.getElementById('scene-title');
+        const subtitle = document.getElementById('scene-subtitle');
+        if (header) header.classList.add('hidden');
+        if (title) title.classList.add('hidden');
+        if (subtitle) subtitle.classList.add('hidden');
+      }, 5200);
 
       setTimeout(() => { if (statusEl) statusEl.style.opacity = '0.35'; }, 2800);
 
