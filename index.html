@@ -36,6 +36,19 @@
       z-index: 1;
     }
 
+    #effects-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 2;
+      pointer-events: none;
+      opacity: 0.35;
+      mix-blend-mode: screen;
+    }
+
     .overlay {
       position: absolute;
       top: 0;
@@ -308,6 +321,8 @@
 </head>
 <body>
   <canvas id="canvas"></canvas>
+  <!-- Atmospheric effects layer for depth and life (fog, particles, light) -->
+  <canvas id="effects-canvas"></canvas>
   <div class="overlay"></div>
 
   <!-- 顶部信息 -->
@@ -375,9 +390,16 @@
   <script src="./base-repo/bundle/index.js"></script>
   <script>
     const canvas = document.getElementById('canvas');
+    const effectsCanvas = document.getElementById('effects-canvas');
+    const effectsCtx = effectsCanvas.getContext('2d', { alpha: true });
+
     const statusEl = document.getElementById('status');
     const titleEl = document.getElementById('scene-title');
     const subtitleEl = document.getElementById('scene-subtitle');
+
+    let effectsAnimationFrame = null;
+    let mouseX = 0.5;
+    let mouseY = 0.5;
 
     // ==================== 场景数据库 ====================
     // 每个场景都有专属推荐的雨/雾/光影参数，切换时自动应用
@@ -385,7 +407,7 @@
       'night-rain': {
         name: '雨夜城市',
         subtitle: '深夜的霓虹与雨声',
-        background: './assets/original/night-city.jpg',
+        background: './assets/scenes-v2/night-city-v2.jpg',
         options: {
           spawnSize: [42, 78], spawnInterval: [0.06, 0.14], dropletsPerSeconds: 480,
           mistColor: [0.009, 0.01, 0.013, 0.92], refractBase: 0.36, refractScale: 0.55,
@@ -395,7 +417,7 @@
       'forest-dusk': {
         name: '暮色松林',
         subtitle: '蓝调时分的森林呼吸',
-        background: './assets/scenes/forest-dusk.jpg',
+        background: './assets/scenes-v2/forest-dusk-v2.jpg',
         options: {
           spawnSize: [28, 55], spawnInterval: [0.09, 0.19], dropletsPerSeconds: 290,
           mistColor: [0.006, 0.009, 0.012, 0.78], refractBase: 0.30, refractScale: 0.46,
@@ -405,7 +427,7 @@
       'bamboo-rain': {
         name: '竹林细雨',
         subtitle: '江南的竹与雨',
-        background: './assets/scenes/bamboo-rain.jpg',
+        background: './assets/scenes-v2/bamboo-rain-v2.jpg',
         options: {
           spawnSize: [22, 48], spawnInterval: [0.10, 0.22], dropletsPerSeconds: 240,
           mistColor: [0.007, 0.011, 0.009, 0.72], refractBase: 0.29, refractScale: 0.44,
@@ -415,7 +437,7 @@
       'stormy-sea': {
         name: '暴风雨海',
         subtitle: '海浪与玻璃的对话',
-        background: './assets/scenes/stormy-sea.jpg',
+        background: './assets/scenes-v2/stormy-sea-v2.jpg',
         options: {
           spawnSize: [52, 105], spawnInterval: [0.035, 0.075], dropletsPerSeconds: 780,
           mistColor: [0.014, 0.015, 0.018, 0.96], refractBase: 0.52, refractScale: 0.68,
@@ -425,7 +447,7 @@
       'alps-morning': {
         name: '阿尔卑斯晨雾',
         subtitle: '雪山与薄雾的安静',
-        background: './assets/scenes/alps-morning.jpg',
+        background: './assets/scenes-v2/alps-morning-v2.jpg',
         options: {
           spawnSize: [18, 38], spawnInterval: [0.14, 0.32], dropletsPerSeconds: 95,
           mistColor: [0.004, 0.006, 0.009, 0.55], refractBase: 0.26, refractScale: 0.38,
@@ -435,7 +457,7 @@
       'mountain-lake': {
         name: '山湖晨光',
         subtitle: '平静湖面与第一缕光',
-        background: './assets/scenes/mountain-lake.jpg',
+        background: './assets/scenes-v2/mountain-lake-v2.jpg',
         options: {
           spawnSize: [15, 32], spawnInterval: [0.18, 0.38], dropletsPerSeconds: 60,
           mistColor: [0.003, 0.005, 0.007, 0.42], refractBase: 0.24, refractScale: 0.36,
@@ -750,6 +772,94 @@
     // Global ambience instance
     let ambience = null;
 
+    // ==================== 大气效果层 (让风景不再是死图) ====================
+    let fogOffset = 0;
+    let particleTime = 0;
+    let particles = [];
+
+    function initAtmosphereParticles(sceneId) {
+      particles = [];
+      const count = (sceneId === 'forest-dusk' || sceneId === 'bamboo-rain') ? 18 : 
+                    (sceneId === 'mountain-lake' || sceneId === 'alps-morning') ? 12 : 8;
+
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          x: Math.random(),
+          y: Math.random() * 0.7 + 0.15,
+          size: Math.random() * 2.5 + 0.8,
+          speed: Math.random() * 0.0008 + 0.0003,
+          opacity: Math.random() * 0.4 + 0.15,
+          type: (sceneId === 'forest-dusk' || sceneId === 'bamboo-rain') ? 'leaf' : 'speck'
+        });
+      }
+    }
+
+    function drawAtmosphere() {
+      if (!effectsCtx || !effectsCanvas) return;
+
+      const w = effectsCanvas.width;
+      const h = effectsCanvas.height;
+
+      effectsCtx.clearRect(0, 0, w, h);
+
+      const currentScene = currentSceneId;
+      fogOffset += 0.0004;
+
+      // === 柔和漂浮雾气层 ===
+      effectsCtx.fillStyle = 'rgba(220, 225, 235, 0.18)';
+      effectsCtx.globalAlpha = (currentScene === 'alps-morning' || currentScene === 'mountain-lake') ? 0.32 : 0.22;
+
+      for (let i = 0; i < 5; i++) {
+        const y = (h * (0.2 + i * 0.15) + Math.sin(fogOffset * 0.6 + i) * 25) % (h * 1.1);
+        effectsCtx.fillRect(0, y, w, h * 0.22);
+      }
+
+      effectsCtx.globalAlpha = 1;
+
+      // === 场景粒子 (树叶 / 光尘 / 雪花感) ===
+      particleTime += 1;
+
+      effectsCtx.fillStyle = (currentScene === 'alps-morning' || currentScene === 'mountain-lake') 
+        ? 'rgba(245, 248, 255, 0.7)' 
+        : 'rgba(200, 210, 180, 0.65)';
+
+      particles.forEach((p, index) => {
+        p.y += p.speed * (currentScene.includes('mountain') || currentScene.includes('lake') ? 0.6 : 1.4);
+        if (p.y > 0.95) p.y = 0.08;
+
+        // 轻微水平飘动
+        const drift = Math.sin(particleTime * 0.015 + index) * 0.0018;
+        const drawX = (p.x + drift + mouseX * 0.015 - 0.0075) * w;
+        const drawY = p.y * h;
+
+        if (p.type === 'leaf') {
+          // 简单树叶形状
+          effectsCtx.save();
+          effectsCtx.translate(drawX, drawY);
+          effectsCtx.rotate(Math.sin(particleTime * 0.02 + index) * 0.6);
+          effectsCtx.fillRect(-p.size * 1.8, -p.size * 0.6, p.size * 3.6, p.size * 1.2);
+          effectsCtx.restore();
+        } else {
+          effectsCtx.fillRect(drawX, drawY, p.size, p.size);
+        }
+      });
+
+      // 额外光晕 / 体积光 (只在晨光和山景)
+      if (currentScene === 'mountain-lake' || currentScene === 'alps-morning') {
+        effectsCtx.fillStyle = 'rgba(255, 235, 200, 0.08)';
+        const lightX = w * (0.3 + Math.sin(particleTime * 0.004) * 0.1);
+        effectsCtx.fillRect(lightX, h * 0.1, w * 0.4, h * 0.55);
+      }
+
+      effectsAnimationFrame = requestAnimationFrame(drawAtmosphere);
+    }
+
+    function startAtmosphere(sceneId) {
+      if (effectsAnimationFrame) cancelAnimationFrame(effectsAnimationFrame);
+      initAtmosphereParticles(sceneId);
+      drawAtmosphere();
+    }
+
     // ==================== 多语言支持 (zh, en, vi, ko) ====================
     const i18n = {
       zh: {
@@ -923,6 +1033,12 @@
       canvas.height = window.innerHeight * dpr;
       canvas.style.width = '100%';
       canvas.style.height = '100%';
+
+      // Effects canvas
+      effectsCanvas.width = window.innerWidth * dpr;
+      effectsCanvas.height = window.innerHeight * dpr;
+      effectsCanvas.style.width = '100%';
+      effectsCanvas.style.height = '100%';
     }
 
     window.addEventListener('resize', () => {
@@ -930,6 +1046,12 @@
         resizeCanvas();
         window.fx.resize(canvas.width, canvas.height);
       }
+    });
+
+    // Subtle mouse parallax for depth feeling
+    document.addEventListener('mousemove', (e) => {
+      mouseX = e.clientX / window.innerWidth;
+      mouseY = e.clientY / window.innerHeight;
     });
 
     let fx = null;
@@ -970,6 +1092,9 @@
 
       // 同步环境声音
       updateAmbienceForScene(sceneId);
+
+      // 启动大气效果层（让风景有生命）
+      startAtmosphere(sceneId);
 
       console.log(`%c[窗景] 已切换至「${scene.name}」`, 'color:#64748b');
     }
@@ -1203,6 +1328,9 @@
       }
 
       updateAmbienceForScene('night-rain', 'natural');
+
+      // 启动初始大气效果
+      startAtmosphere('night-rain');
 
       setTimeout(() => { if (statusEl) statusEl.style.opacity = '0.35'; }, 2800);
 
