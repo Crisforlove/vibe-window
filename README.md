@@ -2,6 +2,10 @@
 
 一个用 WebGL 实现的极致氛围「玻璃窗风景」系统，专为 **vibe coding** 打造。
 
+> **GitHub**: [https://github.com/Crisforlove/vibe-window](https://github.com/Crisforlove/vibe-window)
+
+现在支持**多个不同世界**的窗外风景 + 可叠加的天气调性 + 多语言界面（中文 / English / Tiếng Việt / 한국어）。切换瞬间就能感受到完全不同的情绪。
+
 现在支持**多个不同世界**的窗外风景 + 可叠加的天气调性。切换瞬间就能感受到完全不同的情绪。
 
 ## 快速开始
