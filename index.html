@@ -189,6 +189,51 @@
       padding: 4px 11px;
     }
 
+    /* 声音控制栏 */
+    .audio-bar {
+      position: absolute;
+      right: 40px;
+      bottom: 36px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(0,0,0,0.38);
+      padding: 6px 16px;
+      border-radius: 9999px;
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .audio-bar .sound-btn {
+      font-size: 13px;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      cursor: pointer;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #e5e7eb;
+      transition: all 0.2s ease;
+    }
+    .audio-bar .sound-btn:hover {
+      background: rgba(255,255,255,0.2);
+    }
+    .audio-bar .sound-btn.muted {
+      opacity: 0.6;
+    }
+
+    .audio-bar input[type="range"] {
+      width: 90px;
+      accent-color: #a1a1aa;
+      cursor: pointer;
+    }
+
+    .audio-label {
+      font-size: 11px;
+      opacity: 0.6;
+      margin-right: 4px;
+      white-space: nowrap;
+    }
+
     /* 全屏按钮 - 右上角 */
     .fullscreen-btn {
       position: absolute;
@@ -296,6 +341,13 @@
     <button class="btn" onclick="setClarity('sharp')">通透</button>
   </div>
 
+  <!-- 环境白噪音控制 -->
+  <div class="ui audio-bar">
+    <span class="audio-label" data-i18n="audio_label">环境声</span>
+    <button class="sound-btn" id="sound-toggle" onclick="toggleSound()">🔇</button>
+    <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="0.6" oninput="setVolume(this.value)">
+  </div>
+
   <!-- 全屏按钮 -->
   <div class="ui fullscreen-btn" onclick="toggleFullscreen()">⛶ <span data-i18n="fullscreen">全屏沉浸</span></div>
 
@@ -389,6 +441,219 @@
     let currentSceneId = 'night-rain';
     let currentLang = 'zh';
 
+    // ==================== 程序化环境白噪音 (Web Audio API) ====================
+    class RainAmbience {
+      constructor() {
+        this.audioContext = null;
+        this.isPlaying = false;
+        this.masterGain = null;
+        this.noiseSource = null;
+        this.filters = [];
+        this.dropInterval = null;
+        this.currentIntensity = 0.6;
+        this.currentSceneType = 'rain'; // rain | forest | sea | mountain | calm
+      }
+
+      async init() {
+        if (this.audioContext) return;
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        // Master volume
+        this.masterGain = this.audioContext.createGain();
+        this.masterGain.gain.value = 0.6;
+        this.masterGain.connect(this.audioContext.destination);
+
+        // Create continuous rain hiss layer
+        const bufferSize = 2 * this.audioContext.sampleRate;
+        const buffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        // Pink-ish noise (more natural than pure white)
+        let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+        for (let i = 0; i < bufferSize; i++) {
+          const white = Math.random() * 2 - 1;
+          b0 = 0.99886 * b0 + white * 0.0555179;
+          b1 = 0.99332 * b1 + white * 0.0750759;
+          b2 = 0.96900 * b2 + white * 0.1538520;
+          b3 = 0.86650 * b3 + white * 0.3104856;
+          b4 = 0.55000 * b4 + white * 0.5329522;
+          b5 = -0.7616 * b5 - white * 0.0168980;
+          data[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+          b6 = white * 0.115926;
+        }
+
+        this.noiseSource = this.audioContext.createBufferSource();
+        this.noiseSource.buffer = buffer;
+        this.noiseSource.loop = true;
+
+        // Chain of filters for realistic rain texture
+        let lastNode = this.noiseSource;
+
+        // Main lowpass (rain body)
+        const lowpass = this.audioContext.createBiquadFilter();
+        lowpass.type = 'lowpass';
+        lowpass.frequency.value = 1400;
+        lastNode.connect(lowpass);
+        lastNode = lowpass;
+        this.filters.push(lowpass);
+
+        // Bandpass for the "shimmer" of rain
+        const bandpass = this.audioContext.createBiquadFilter();
+        bandpass.type = 'bandpass';
+        bandpass.frequency.value = 2200;
+        bandpass.Q.value = 0.7;
+        lastNode.connect(bandpass);
+        lastNode = bandpass;
+        this.filters.push(bandpass);
+
+        // Final gain for this layer
+        const hissGain = this.audioContext.createGain();
+        hissGain.gain.value = 0.7;
+        lastNode.connect(hissGain);
+        hissGain.connect(this.masterGain);
+
+        this.hissGain = hissGain;
+      }
+
+      async start() {
+        if (this.isPlaying) return;
+        await this.init();
+
+        if (this.audioContext.state === 'suspended') {
+          await this.audioContext.resume();
+        }
+
+        this.noiseSource.start();
+        this.isPlaying = true;
+        this._startDrops();
+        this.setIntensity(this.currentIntensity);
+      }
+
+      stop() {
+        if (!this.isPlaying) return;
+
+        this.noiseSource.stop();
+        this._stopDrops();
+
+        // Recreate noise source for next play
+        this.noiseSource = null;
+        this.isPlaying = false;
+      }
+
+      setVolume(volume) {
+        if (this.masterGain) {
+          this.masterGain.gain.value = volume;
+        }
+      }
+
+      setIntensity(intensity) {
+        this.currentIntensity = Math.max(0, Math.min(1, intensity));
+
+        if (!this.hissGain || !this.filters.length) return;
+
+        // Adjust hiss volume
+        this.hissGain.gain.value = 0.4 + this.currentIntensity * 0.6;
+
+        // Adjust filter cutoff based on intensity and scene
+        const baseFreq = this._getBaseFrequency();
+        this.filters[0].frequency.value = baseFreq + this.currentIntensity * 800;
+
+        // More intensity = slightly brighter rain
+        if (this.filters[1]) {
+          this.filters[1].frequency.value = 1800 + this.currentIntensity * 1200;
+        }
+      }
+
+      setSceneType(type) {
+        this.currentSceneType = type;
+        if (this.isPlaying) {
+          this.setIntensity(this.currentIntensity); // re-apply with new character
+        }
+      }
+
+      _getBaseFrequency() {
+        switch (this.currentSceneType) {
+          case 'sea':     return 900;   // deeper, rumbly
+          case 'forest':  return 1100;
+          case 'mountain':return 1300;  // lighter, windier
+          case 'calm':    return 1500;
+          default:        return 1200;  // normal rain
+        }
+      }
+
+      _startDrops() {
+        this._stopDrops();
+
+        const scheduleDrop = () => {
+          if (!this.isPlaying || !this.audioContext) return;
+
+          const intensity = this.currentIntensity;
+          if (intensity < 0.15) {
+            // very light rain — rare drops
+            this.dropTimeout = setTimeout(scheduleDrop, 800 + Math.random() * 1200);
+            return;
+          }
+
+          this._playDrop(intensity);
+
+          // Dynamic interval based on intensity
+          const baseInterval = 140 - intensity * 90;
+          const next = baseInterval + Math.random() * (90 - intensity * 50);
+          this.dropTimeout = setTimeout(scheduleDrop, next);
+        };
+
+        scheduleDrop();
+      }
+
+      _stopDrops() {
+        if (this.dropTimeout) {
+          clearTimeout(this.dropTimeout);
+          this.dropTimeout = null;
+        }
+      }
+
+      _playDrop(intensity) {
+        if (!this.audioContext) return;
+
+        const duration = 0.08 + Math.random() * 0.12;
+        const buffer = this.audioContext.createBuffer(1, this.audioContext.sampleRate * duration, this.audioContext.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        for (let i = 0; i < data.length; i++) {
+          data[i] = (Math.random() * 2 - 1) * (1 - i / data.length); // decay
+        }
+
+        const source = this.audioContext.createBufferSource();
+        source.buffer = buffer;
+
+        const filter = this.audioContext.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = 650 + Math.random() * 900;
+        filter.Q.value = 1.2;
+
+        const dropGain = this.audioContext.createGain();
+        const peak = (0.6 + intensity * 0.8) * (0.7 + Math.random() * 0.6);
+        dropGain.gain.value = peak;
+
+        const envelope = this.audioContext.createGain();
+        envelope.gain.value = 1;
+
+        source.connect(filter);
+        filter.connect(dropGain);
+        dropGain.connect(envelope);
+        envelope.connect(this.masterGain);
+
+        const now = this.audioContext.currentTime;
+        envelope.gain.setValueAtTime(peak, now);
+        envelope.gain.linearRampToValueAtTime(0.0001, now + duration);
+
+        source.start(now);
+      }
+    }
+
+    // Global ambience instance
+    let ambience = null;
+
     // ==================== 多语言支持 (zh, en, vi, ko) ====================
     const i18n = {
       zh: {
@@ -414,6 +679,7 @@
         scene_stormy_sea: '暴风雨海',
         scene_alps_morning: '阿尔卑斯晨雾',
         scene_mountain_lake: '山湖晨光',
+        audio_label: '环境声',
       },
       en: {
         scenes_label: 'Outside View',
@@ -426,6 +692,7 @@
         clarity_soft: 'Soft',
         clarity_natural: 'Natural',
         clarity_sharp: 'Sharp',
+        audio_label: 'Ambience',
         mood_gentle: 'Gentle',
         mood_heavy: 'Heavy',
         mood_quiet: 'Light',
@@ -450,6 +717,7 @@
         clarity_soft: 'Mềm mại',
         clarity_natural: 'Tự nhiên',
         clarity_sharp: 'Rõ nét',
+        audio_label: 'Âm thanh',
         mood_gentle: 'Nhẹ nhàng',
         mood_heavy: 'Mưa lớn',
         mood_quiet: 'Mưa phùn',
@@ -474,6 +742,7 @@
         clarity_soft: '부드러움',
         clarity_natural: '자연',
         clarity_sharp: '선명',
+        audio_label: '환경음',
         mood_gentle: '잔잔한',
         mood_heavy: '폭우',
         mood_quiet: '가랑비',
@@ -599,6 +868,9 @@
       const o = window.fx.options;
       Object.assign(o, scene.options);
 
+      // 同步环境声音
+      updateAmbienceForScene(sceneId);
+
       console.log(`%c[窗景] 已切换至「${scene.name}」`, 'color:#64748b');
     }
 
@@ -625,6 +897,18 @@
           o.mistColor = [0.002, 0.003, 0.005, 0.28]; o.gravity = 720; o.mistTime = 55; break;
       }
       console.log(`%c[窗景] 天气调性已调整为「${mood}」`, 'color:#64748b');
+
+      // 根据天气强度调整环境声
+      if (ambience && ambience.isPlaying) {
+        let moodIntensity = 0.6;
+        if (mood === 'heavy') moodIntensity = 0.95;
+        if (mood === 'gentle') moodIntensity = 0.45;
+        if (mood === 'quiet') moodIntensity = 0.32;
+        if (mood === 'clear') moodIntensity = 0.15;
+
+        const current = ambience.currentIntensity || 0.5;
+        ambience.setIntensity(Math.max(current * 0.6, moodIntensity));
+      }
     }
 
     function randomize() {
@@ -636,6 +920,72 @@
       o.gravity = 950 + Math.random()*2100;
       o.mistTime = 6 + Math.random()*42;
       console.log('%c[窗景] 随机调性已应用', 'color:#64748b');
+    }
+
+    // ==================== 环境声音控制函数 ====================
+    async function toggleSound() {
+      if (!ambience) {
+        ambience = new RainAmbience();
+      }
+
+      const btn = document.getElementById('sound-toggle');
+
+      if (!ambience.isPlaying) {
+        await ambience.start();
+        btn.textContent = '🔊';
+        btn.classList.remove('muted');
+      } else {
+        ambience.stop();
+        btn.textContent = '🔇';
+        btn.classList.add('muted');
+      }
+    }
+
+    function setVolume(value) {
+      if (ambience) {
+        ambience.setVolume(parseFloat(value));
+      }
+    }
+
+    // 根据场景和清晰度智能调整环境声
+    function updateAmbienceForScene(sceneId, clarityLevel = null) {
+      if (!ambience || !ambience.isPlaying) return;
+
+      let sceneType = 'rain';
+      let intensity = 0.55;
+
+      switch (sceneId) {
+        case 'stormy-sea':
+          sceneType = 'sea';
+          intensity = 0.85;
+          break;
+        case 'night-rain':
+        case 'bamboo-rain':
+          sceneType = 'rain';
+          intensity = 0.65;
+          break;
+        case 'forest-dusk':
+          sceneType = 'forest';
+          intensity = 0.5;
+          break;
+        case 'alps-morning':
+          sceneType = 'mountain';
+          intensity = 0.35;
+          break;
+        case 'mountain-lake':
+          sceneType = 'calm';
+          intensity = 0.22;
+          break;
+      }
+
+      // 根据清晰度进一步调整（越通透 = 雨声越轻）
+      if (clarityLevel) {
+        const clarityMap = { dreamy: 1.0, soft: 0.85, natural: 0.7, sharp: 0.35 };
+        intensity *= (clarityMap[clarityLevel] || 0.7);
+      }
+
+      ambience.setSceneType(sceneType);
+      ambience.setIntensity(intensity);
     }
 
     // ==================== 新功能：窗外清晰度 + 全屏 ====================
@@ -674,6 +1024,9 @@
       const bg = scenes[currentSceneId].background;
       window.fx.setBackground(bg);
 
+      // 同步环境声音强度
+      updateAmbienceForScene(currentSceneId, level);
+
       console.log(`%c[窗景] 清晰度已调整为「${level}」`, 'color:#64748b');
     }
 
@@ -710,6 +1063,10 @@
       document.querySelectorAll('.scene-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.scene === 'night-rain');
       });
+
+      // 预初始化环境声音（用户首次交互后才真正播放）
+      ambience = new RainAmbience();
+      updateAmbienceForScene('night-rain', 'natural');
 
       setTimeout(() => { if (statusEl) statusEl.style.opacity = '0.35'; }, 2800);
 
