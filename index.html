@@ -172,7 +172,7 @@
     }
 
     #left-panel:hover {
-      width: 340px;
+      width: 380px;   /* 增加宽度，让按钮行能完整显示 */
       background: rgba(0, 0, 0, 0.45);
     }
 
@@ -199,12 +199,12 @@
       left: 18px;
       top: 0;
       bottom: 0;
-      width: 320px;
+      width: 360px;   /* 配合面板宽度 */
       display: flex;
       flex-direction: column;
       justify-content: flex-end;
-      gap: 8px;
-      padding: 0 0 20px 12px;
+      gap: 10px;
+      padding: 12px 12px 20px 12px;
       opacity: 0;
       transition: opacity 0.2s ease;
       pointer-events: none;
@@ -222,6 +222,28 @@
       bottom: auto !important;
       width: auto;
       margin: 0;
+    }
+
+    /* 侧边栏内让按钮可以换行，避免内容被裁剪 */
+    #left-panel .scenes-bar,
+    #left-panel .clarity-bar,
+    #left-panel .weather-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #left-panel .scenes-label {
+      margin-right: 8px;
+      flex-shrink: 0;
+    }
+
+    #left-panel .scene-btn,
+    #left-panel .weather-bar .btn,
+    #left-panel .clarity-bar .btn {
+      padding-top: 4px;
+      padding-bottom: 4px;
     }
 
     .scenes-label {
