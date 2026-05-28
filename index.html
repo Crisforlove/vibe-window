@@ -344,6 +344,7 @@
     <button class="btn" onclick="setClarity('soft')">柔和</button>
     <button class="btn" onclick="setClarity('natural')">自然</button>
     <button class="btn" onclick="setClarity('sharp')">通透</button>
+    <button class="btn" onclick="setClarity('clear')">完全通透</button>
   </div>
 
   <!-- 环境白噪音控制 -->
@@ -762,6 +763,7 @@
         clarity_soft: '柔和',
         clarity_natural: '自然',
         clarity_sharp: '通透',
+        clarity_clear: '完全通透',
         mood_gentle: '温柔',
         mood_heavy: '暴雨',
         mood_quiet: '细雨',
@@ -787,6 +789,7 @@
         clarity_soft: 'Soft',
         clarity_natural: 'Natural',
         clarity_sharp: 'Sharp',
+        clarity_clear: 'Crystal Clear',
         audio_label: 'Ambience',
         mood_gentle: 'Gentle',
         mood_heavy: 'Heavy',
@@ -812,6 +815,7 @@
         clarity_soft: 'Mềm mại',
         clarity_natural: 'Tự nhiên',
         clarity_sharp: 'Rõ nét',
+        clarity_clear: 'Hoàn toàn trong suốt',
         audio_label: 'Âm thanh',
         mood_gentle: 'Nhẹ nhàng',
         mood_heavy: 'Mưa lớn',
@@ -837,6 +841,7 @@
         clarity_soft: '부드러움',
         clarity_natural: '자연',
         clarity_sharp: '선명',
+        clarity_clear: '완전 투명',
         audio_label: '환경음',
         mood_gentle: '잔잔한',
         mood_heavy: '폭우',
@@ -888,7 +893,7 @@
 
       // 更新清晰度按钮
       const clarityBtns = document.querySelectorAll('.clarity-bar .btn');
-      const clarityLabels = ['clarity_dreamy','clarity_soft','clarity_natural','clarity_sharp'];
+      const clarityLabels = ['clarity_dreamy','clarity_soft','clarity_natural','clarity_sharp','clarity_clear'];
       clarityBtns.forEach((btn, i) => {
         if (t[clarityLabels[i]]) btn.textContent = t[clarityLabels[i]];
       });
@@ -1084,7 +1089,13 @@
 
       // 根据清晰度进一步调整（越通透 = 雨声越轻）
       if (clarityLevel) {
-        const clarityMap = { dreamy: 1.0, soft: 0.85, natural: 0.7, sharp: 0.35 };
+        const clarityMap = { 
+          dreamy: 1.0, 
+          soft: 0.85, 
+          natural: 0.7, 
+          sharp: 0.35,
+          clear: 0.08   // 完全通透时环境声几乎消失
+        };
         intensity *= (clarityMap[clarityLevel] || 0.7);
       }
 
@@ -1121,6 +1132,20 @@
           o.refractBase = 0.22;
           o.refractScale = 0.32;
           if (o.mistColor) o.mistColor[3] = Math.max((o.mistColor[3] || 0.7) - 0.18, 0.12);
+          break;
+
+        case 'clear':  // 完全通透 - 几乎没有雨和雾
+          o.backgroundBlurSteps = 0;
+          o.refractBase = 0.08;
+          o.refractScale = 0.15;
+          if (o.mistColor) o.mistColor[3] = 0.04;
+
+          // 同时大幅降低实际雨滴数量，让玻璃真正“干净”
+          o.spawnSize = [6, 14];
+          o.spawnInterval = [0.35, 0.8];
+          o.dropletsPerSeconds = 8;
+          o.gravity = 600;
+          o.mistTime = 80;
           break;
       }
 
