@@ -441,7 +441,7 @@
     let currentSceneId = 'night-rain';
     let currentLang = 'zh';
 
-    // ==================== 程序化环境白噪音 (Web Audio API) ====================
+    // ==================== 程序化环境白噪音 (Web Audio API) - 增强版 ====================
     class RainAmbience {
       constructor() {
         this.audioContext = null;
@@ -449,26 +449,34 @@
         this.masterGain = null;
         this.noiseSource = null;
         this.filters = [];
-        this.dropInterval = null;
-        this.currentIntensity = 0.6;
-        this.currentSceneType = 'rain'; // rain | forest | sea | mountain | calm
+        this.hissGain = null;
+        this.dropTimeout = null;
+
+        this.currentIntensity = 0.55;
+        this.targetVolume = 0.65;           // 用户期望的音量
+        this.currentSceneType = 'rain';     // rain | forest | sea | mountain | calm
+
+        // 用于更强的场景差异
+        this.windGain = null;
+        this.windFilter = null;
       }
 
       async init() {
         if (this.audioContext) return;
+
         this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
         // Master volume
         this.masterGain = this.audioContext.createGain();
-        this.masterGain.gain.value = 0.6;
+        this.masterGain.gain.value = this.targetVolume;
         this.masterGain.connect(this.audioContext.destination);
 
-        // Create continuous rain hiss layer
+        // ========== 主雨声层 (持续的雨声嘶嘶声) ==========
         const bufferSize = 2 * this.audioContext.sampleRate;
         const buffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate);
         const data = buffer.getChannelData(0);
 
-        // Pink-ish noise (more natural than pure white)
+        // Pink noise
         let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
         for (let i = 0; i < bufferSize; i++) {
           const white = Math.random() * 2 - 1;
@@ -486,33 +494,54 @@
         this.noiseSource.buffer = buffer;
         this.noiseSource.loop = true;
 
-        // Chain of filters for realistic rain texture
         let lastNode = this.noiseSource;
 
-        // Main lowpass (rain body)
+        // 低通 - 雨声主体
         const lowpass = this.audioContext.createBiquadFilter();
         lowpass.type = 'lowpass';
-        lowpass.frequency.value = 1400;
+        lowpass.frequency.value = 1350;
         lastNode.connect(lowpass);
         lastNode = lowpass;
         this.filters.push(lowpass);
 
-        // Bandpass for the "shimmer" of rain
+        // 带通 - 雨滴的闪亮感
         const bandpass = this.audioContext.createBiquadFilter();
         bandpass.type = 'bandpass';
-        bandpass.frequency.value = 2200;
-        bandpass.Q.value = 0.7;
+        bandpass.frequency.value = 2100;
+        bandpass.Q.value = 0.65;
         lastNode.connect(bandpass);
         lastNode = bandpass;
         this.filters.push(bandpass);
 
-        // Final gain for this layer
-        const hissGain = this.audioContext.createGain();
-        hissGain.gain.value = 0.7;
-        lastNode.connect(hissGain);
-        hissGain.connect(this.masterGain);
+        this.hissGain = this.audioContext.createGain();
+        this.hissGain.gain.value = 0.75;
+        lastNode.connect(this.hissGain);
+        this.hissGain.connect(this.masterGain);
 
-        this.hissGain = hissGain;
+        // ========== 风声层（用于山景、森林等） ==========
+        const windBuffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate);
+        const windData = windBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          windData[i] = Math.random() * 2 - 1;
+        }
+
+        const windSource = this.audioContext.createBufferSource();
+        windSource.buffer = windBuffer;
+        windSource.loop = true;
+
+        this.windFilter = this.audioContext.createBiquadFilter();
+        this.windFilter.type = 'lowpass';
+        this.windFilter.frequency.value = 420;
+
+        this.windGain = this.audioContext.createGain();
+        this.windGain.gain.value = 0; // 默认关闭
+
+        windSource.connect(this.windFilter);
+        this.windFilter.connect(this.windGain);
+        this.windGain.connect(this.masterGain);
+
+        windSource.start();
+        this.windSource = windSource; // 保存以便后续控制
       }
 
       async start() {
@@ -541,8 +570,10 @@
       }
 
       setVolume(volume) {
+        this.targetVolume = Math.max(0, Math.min(1, parseFloat(volume)));
+
         if (this.masterGain) {
-          this.masterGain.gain.value = volume;
+          this.masterGain.gain.value = this.targetVolume;
         }
       }
 
@@ -551,34 +582,68 @@
 
         if (!this.hissGain || !this.filters.length) return;
 
-        // Adjust hiss volume
-        this.hissGain.gain.value = 0.4 + this.currentIntensity * 0.6;
+        const scene = this.currentSceneType;
 
-        // Adjust filter cutoff based on intensity and scene
-        const baseFreq = this._getBaseFrequency();
-        this.filters[0].frequency.value = baseFreq + this.currentIntensity * 800;
+        // 基础雨声强度
+        let hissVol = 0.35 + this.currentIntensity * 0.75;
+        let lowpassFreq = this._getBaseLowpass(scene);
+        let bandpassFreq = this._getBaseBandpass(scene);
 
-        // More intensity = slightly brighter rain
+        // 根据场景大幅调整特征
+        if (scene === 'sea') {
+          hissVol *= 1.1;
+          lowpassFreq *= 0.75;
+        } else if (scene === 'mountain' || scene === 'calm') {
+          hissVol *= 0.65;
+          lowpassFreq *= 1.15;
+        } else if (scene === 'forest') {
+          hissVol *= 0.9;
+        }
+
+        this.hissGain.gain.value = hissVol;
+        this.filters[0].frequency.value = lowpassFreq + this.currentIntensity * 600;
         if (this.filters[1]) {
-          this.filters[1].frequency.value = 1800 + this.currentIntensity * 1200;
+          this.filters[1].frequency.value = bandpassFreq + this.currentIntensity * 900;
+        }
+
+        // 风声层（山景和森林更明显）
+        if (this.windGain) {
+          let windVol = 0;
+          if (scene === 'mountain') windVol = 0.35 + this.currentIntensity * 0.45;
+          else if (scene === 'forest') windVol = 0.18 + this.currentIntensity * 0.32;
+          else if (scene === 'calm') windVol = 0.12 + this.currentIntensity * 0.25;
+          else if (scene === 'sea') windVol = 0.08 + this.currentIntensity * 0.2;
+
+          this.windGain.gain.value = windVol;
+          if (this.windFilter) {
+            this.windFilter.frequency.value = (scene === 'sea' || scene === 'mountain') ? 380 : 520;
+          }
         }
       }
 
       setSceneType(type) {
         this.currentSceneType = type;
+
         if (this.isPlaying) {
-          this.setIntensity(this.currentIntensity); // re-apply with new character
+          // 重新应用当前强度，让场景特征立即生效
+          this.setIntensity(this.currentIntensity);
         }
       }
 
-      _getBaseFrequency() {
-        switch (this.currentSceneType) {
-          case 'sea':     return 900;   // deeper, rumbly
-          case 'forest':  return 1100;
-          case 'mountain':return 1300;  // lighter, windier
-          case 'calm':    return 1500;
-          default:        return 1200;  // normal rain
-        }
+      _getBaseLowpass(scene) {
+        if (scene === 'sea') return 850;
+        if (scene === 'mountain') return 1550;
+        if (scene === 'calm') return 1650;
+        if (scene === 'forest') return 1250;
+        return 1320;
+      }
+
+      _getBaseBandpass(scene) {
+        if (scene === 'sea') return 1650;
+        if (scene === 'mountain') return 2650;
+        if (scene === 'calm') return 2800;
+        if (scene === 'forest') return 2300;
+        return 2100;
       }
 
       _startDrops() {
@@ -615,12 +680,33 @@
       _playDrop(intensity) {
         if (!this.audioContext) return;
 
-        const duration = 0.08 + Math.random() * 0.12;
+        const scene = this.currentSceneType;
+        let duration = 0.07 + Math.random() * 0.11;
+        let freqMin = 620;
+        let freqMax = 1550;
+        let q = 1.1;
+
+        // 根据场景改变雨滴质感
+        if (scene === 'sea') {
+          duration *= 1.35;
+          freqMin = 420;
+          freqMax = 980;
+          q = 0.8;
+        } else if (scene === 'mountain' || scene === 'calm') {
+          duration *= 0.75;
+          freqMin = 980;
+          freqMax = 2400;
+          q = 1.6;
+        } else if (scene === 'forest') {
+          freqMin = 750;
+          freqMax = 1750;
+        }
+
         const buffer = this.audioContext.createBuffer(1, this.audioContext.sampleRate * duration, this.audioContext.sampleRate);
         const data = buffer.getChannelData(0);
 
         for (let i = 0; i < data.length; i++) {
-          data[i] = (Math.random() * 2 - 1) * (1 - i / data.length); // decay
+          data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
         }
 
         const source = this.audioContext.createBufferSource();
@@ -628,15 +714,19 @@
 
         const filter = this.audioContext.createBiquadFilter();
         filter.type = 'bandpass';
-        filter.frequency.value = 650 + Math.random() * 900;
-        filter.Q.value = 1.2;
+        filter.frequency.value = freqMin + Math.random() * (freqMax - freqMin);
+        filter.Q.value = q;
 
         const dropGain = this.audioContext.createGain();
-        const peak = (0.6 + intensity * 0.8) * (0.7 + Math.random() * 0.6);
+        let peak = (0.55 + intensity * 0.85) * (0.65 + Math.random() * 0.55);
+
+        // 山景和森林的雨滴更清脆
+        if (scene === 'mountain' || scene === 'calm') peak *= 0.85;
+        if (scene === 'sea') peak *= 1.15;
+
         dropGain.gain.value = peak;
 
         const envelope = this.audioContext.createGain();
-        envelope.gain.value = 1;
 
         source.connect(filter);
         filter.connect(dropGain);
@@ -644,8 +734,8 @@
         envelope.connect(this.masterGain);
 
         const now = this.audioContext.currentTime;
-        envelope.gain.setValueAtTime(peak, now);
-        envelope.gain.linearRampToValueAtTime(0.0001, now + duration);
+        envelope.gain.value = peak;
+        envelope.gain.linearRampToValueAtTime(0.0001, now + duration * 1.1);
 
         source.start(now);
       }
@@ -924,9 +1014,7 @@
 
     // ==================== 环境声音控制函数 ====================
     async function toggleSound() {
-      if (!ambience) {
-        ambience = new RainAmbience();
-      }
+      if (!ambience) ambience = new RainAmbience();
 
       const btn = document.getElementById('sound-toggle');
 
@@ -942,9 +1030,20 @@
     }
 
     function setVolume(value) {
+      const vol = parseFloat(value);
+
+      // 无论声音是否已开启，都记录用户想要的音量
       if (ambience) {
-        ambience.setVolume(parseFloat(value));
+        ambience.setVolume(vol);
+      } else {
+        // 还没创建实例时，先创建一个（但不播放）
+        ambience = new RainAmbience();
+        ambience.targetVolume = vol;
       }
+
+      // 同步滑块显示（防止某些情况不同步）
+      const slider = document.getElementById('volume-slider');
+      if (slider) slider.value = vol;
     }
 
     // 根据场景和清晰度智能调整环境声
@@ -1064,8 +1163,15 @@
         btn.classList.toggle('active', btn.dataset.scene === 'night-rain');
       });
 
-      // 预初始化环境声音（用户首次交互后才真正播放）
+      // 预初始化环境声音
       ambience = new RainAmbience();
+
+      // 读取当前滑块值作为初始音量
+      const slider = document.getElementById('volume-slider');
+      if (slider) {
+        ambience.targetVolume = parseFloat(slider.value);
+      }
+
       updateAmbienceForScene('night-rain', 'natural');
 
       setTimeout(() => { if (statusEl) statusEl.style.opacity = '0.35'; }, 2800);
